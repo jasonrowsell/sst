@@ -1,46 +1,7 @@
 import { Input } from "../../input";
 import { Dns } from "../../dns";
 
-export interface ApiGatewayV2DomainArgs {
-  /**
-   * Use an existing API Gateway domain name.
-   *
-   * By default, a new API Gateway domain name is created. If you'd like to use an existing
-   * domain name, set the `nameId` to the ID of the domain name and **do not** pass in `name`.
-   *
-   * @example
-   * ```js
-   * {
-   *   domain: {
-   *     nameId: "example.com"
-   *   }
-   * }
-   * ```
-   */
-  nameId?: Input<string>;
-  /**
-   * The custom domain you want to use.
-   *
-   * @example
-   * ```js
-   * {
-   *   domain: {
-   *     name: "example.com"
-   *   }
-   * }
-   * ```
-   *
-   * Can also include subdomains based on the current stage.
-   *
-   * ```js
-   * {
-   *   domain: {
-   *     name: `${$app.stage}.example.com`
-   *   }
-   * }
-   * ```
-   */
-  name?: Input<string>;
+interface ApiGatewayV2DomainArgsBase {
   /**
    * The base mapping for the custom domain. This adds a suffix to the URL of the API.
    *
@@ -142,3 +103,50 @@ export interface ApiGatewayV2DomainArgs {
    */
   dns?: Input<false | (Dns & {})>;
 }
+
+export type ApiGatewayV2DomainArgs =
+  | (ApiGatewayV2DomainArgsBase & {
+      /**
+       * The custom domain you want to use.
+       *
+       * @example
+       * ```js
+       * {
+       *   domain: {
+       *     name: "example.com"
+       *   }
+       * }
+       * ```
+       *
+       * Can also include subdomains based on the current stage.
+       *
+       * ```js
+       * {
+       *   domain: {
+       *     name: `${$app.stage}.example.com`
+       *   }
+       * }
+       * ```
+       */
+      name: Input<string>;
+      nameId?: never;
+    })
+  | (ApiGatewayV2DomainArgsBase & {
+      /**
+       * Use an existing API Gateway domain name.
+       *
+       * By default, a new API Gateway domain name is created. If you'd like to use an existing
+       * domain name, set the `nameId` to the ID of the domain name and **do not** pass in `name`.
+       *
+       * @example
+       * ```js
+       * {
+       *   domain: {
+       *     nameId: "example.com"
+       *   }
+       * }
+       * ```
+       */
+      nameId: Input<string>;
+      name?: never;
+    });
