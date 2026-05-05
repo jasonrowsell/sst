@@ -62,8 +62,13 @@ if (!cmd || cmd === "components") {
 
   for (const component of components) {
     const sourceFile = component.sources![0].fileName;
-    // Skip - generated into the global-config doc
-    if (sourceFile.endsWith("/aws/iam-edit.ts")) continue;
+    // Skip - generated into the global-config doc, or shared helper types without
+    // their own doc page (referenced from apigatewayv2 and apigateway-websocket).
+    if (
+      sourceFile.endsWith("/aws/iam-edit.ts") ||
+      sourceFile.endsWith("/aws/helpers/apigatewayv2-domain.ts")
+    )
+      continue;
     else if (sourceFile === "platform/src/global-config.d.ts") {
       const iamEditComponent = components.find((c) =>
         c.sources![0].fileName.endsWith("/aws/iam-edit.ts")
@@ -1153,6 +1158,9 @@ function renderType(
         renderSomeType(type.typeArguments?.[0]!),
         `<code class="symbol">&gt;</code>`,
       ].join("");
+    }
+    if (type.name === "Prettify" && type.typeArguments?.[0]) {
+      return renderSomeType(type.typeArguments[0]);
     }
     const dnsProvider = {
       AwsDns: "aws",
@@ -2466,6 +2474,7 @@ async function buildComponents() {
       "../platform/src/components/aws/apigatewayv2-lambda-route.ts",
       "../platform/src/components/aws/apigatewayv2-private-route.ts",
       "../platform/src/components/aws/apigatewayv2-url-route.ts",
+      "../platform/src/components/aws/helpers/apigatewayv2-domain.ts",
       "../platform/src/components/aws/app-sync.ts",
       "../platform/src/components/aws/app-sync-data-source.ts",
       "../platform/src/components/aws/app-sync-function.ts",
