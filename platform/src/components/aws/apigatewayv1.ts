@@ -29,46 +29,7 @@ import { ApiGatewayV1IntegrationRoute } from "./apigatewayv1-integration-route";
 import { ApiGatewayV1UsagePlan } from "./apigatewayv1-usage-plan";
 import { useProvider } from "./helpers/provider";
 
-export interface ApiGatewayV1DomainArgs {
-  /**
-   * Use an existing API Gateway domain name.
-   *
-   * By default, a new API Gateway domain name is created. If you'd like to use an existing
-   * domain name, set the `nameId` to the ID of the domain name and **do not** pass in `name`.
-   *
-   * @example
-   * ```js
-   * {
-   *   domain: {
-   *     nameId: "example.com"
-   *   }
-   * }
-   * ```
-   */
-  nameId?: Input<string>;
-  /**
-   * The custom domain you want to use.
-   *
-   * @example
-   * ```js
-   * {
-   *   domain: {
-   *     name: "example.com"
-   *   }
-   * }
-   * ```
-   *
-   * Can also include subdomains based on the current stage.
-   *
-   * ```js
-   * {
-   *   domain: {
-   *     name: `${$app.stage}.example.com`
-   *   }
-   * }
-   * ```
-   */
-  name: Input<string>;
+interface ApiGatewayV1DomainArgsBase {
   /**
    * The base mapping for the custom domain. This adds a suffix to the URL of the API.
    *
@@ -170,6 +131,53 @@ export interface ApiGatewayV1DomainArgs {
    */
   dns?: Input<false | (Dns & {})>;
 }
+
+export type ApiGatewayV1DomainArgs =
+  | (ApiGatewayV1DomainArgsBase & {
+      /**
+       * The custom domain you want to use.
+       *
+       * @example
+       * ```js
+       * {
+       *   domain: {
+       *     name: "example.com"
+       *   }
+       * }
+       * ```
+       *
+       * Can also include subdomains based on the current stage.
+       *
+       * ```js
+       * {
+       *   domain: {
+       *     name: `${$app.stage}.example.com`
+       *   }
+       * }
+       * ```
+       */
+      name: Input<string>;
+      nameId?: never;
+    })
+  | (ApiGatewayV1DomainArgsBase & {
+      /**
+       * Use an existing API Gateway domain name.
+       *
+       * By default, a new API Gateway domain name is created. If you'd like to use an existing
+       * domain name, set the `nameId` to the ID of the domain name and **do not** pass in `name`.
+       *
+       * @example
+       * ```js
+       * {
+       *   domain: {
+       *     nameId: "example.com"
+       *   }
+       * }
+       * ```
+       */
+      nameId: Input<string>;
+      name?: never;
+    });
 
 export interface ApiGatewayV1Args {
   /**
@@ -1344,15 +1352,10 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
       if (!args.domain) return;
 
       return output(args.domain).apply((domain) => {
-        // validate
         if (typeof domain !== "string") {
           if (domain.name && domain.nameId)
             throw new VisibleError(
               `Cannot configure both domain "name" and "nameId" for the "${name}" API.`,
-            );
-          if (!domain.name && !domain.nameId)
-            throw new VisibleError(
-              `Either domain "name" or "nameId" is required for the "${name}" API.`,
             );
           if (domain.dns === false && !domain.cert)
             throw new VisibleError(
@@ -1360,15 +1363,18 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
             );
         }
 
-        // normalize
         const norm = typeof domain === "string" ? { name: domain } : domain;
-        return {
-          name: norm.name,
-          nameId: norm.nameId,
-          path: norm.path,
-          dns: norm.dns === false ? undefined : norm.dns ?? awsDns(),
-          cert: norm.cert,
-        };
+        const path = norm.path;
+        const dns = norm.dns === false ? undefined : norm.dns ?? awsDns();
+        const cert = norm.cert;
+
+        if (norm.nameId)
+          return { kind: "existing" as const, nameId: norm.nameId, path, dns, cert };
+        if (norm.name)
+          return { kind: "new" as const, name: norm.name, path, dns, cert };
+        throw new VisibleError(
+          `Either domain "name" or "nameId" is required for the "${name}" API.`,
+        );
       });
     }
 
@@ -1579,7 +1585,7 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
       return all([domain, endpointType, region]).apply(
         ([domain, endpointType, region]) => {
           if (domain.cert) return output(domain.cert);
-          if (domain.nameId) return output(undefined);
+          if (domain.kind === "existing") return output(undefined);
 
           return new DnsValidatedCertificate(
             `${name}Ssl`,
@@ -1603,7 +1609,7 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
       if (!domain || !certificateArn) return;
 
       return all([domain, endpointType]).apply(([domain, endpointType]) =>
-        domain.nameId
+        domain.kind === "existing"
           ? apigateway.DomainName.get(
             `${name}DomainName`,
             domain.nameId,
@@ -1615,7 +1621,7 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
               args.transform?.domainName,
               `${name}DomainName`,
               {
-                domainName: domain?.name,
+                domainName: domain.name,
                 endpointConfiguration: { types: endpointType },
                 ...(endpointType === "REGIONAL"
                   ? {
@@ -1635,7 +1641,7 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
 
       domain.apply((domain) => {
         if (!domain.dns) return;
-        if (domain.nameId) return;
+        if (domain.kind === "existing") return;
 
         domain.dns.createAlias(
           name,
